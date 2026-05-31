@@ -99,6 +99,17 @@ The savings compound across turns: the naive approach re-pays for the whole docu
 
 The same pattern applies to a million-row CSV (a checkable aggregate, not the rows) and a 100-page codebase (the relevant files, not the tree).
 
+## Tested & verified
+
+An A/B test on Claude Code (real scripts, deterministic PDF fixtures) confirms the slice is both smaller and on-target — and that savings grow with document size. All seven automated checks pass (`7 passed, 0 failed`).
+
+| Document | Naive (full doc in context) | Token Saver (anchored slice) | Input tokens saved |
+| --- | --- | --- | --- |
+| 29-page PDF, 2 questions | 6,282 | 2,238 | **64%** |
+| 150-page PDF, 1 question | 17,212 | 536 | **96%** |
+
+Reproducible from a clean checkout in a few minutes (no API key needed for the token measurement). Full methodology, per-check breakdown, and a known limitation are in [TESTING.md](TESTING.md).
+
 ## License
 
 MIT — use, modify, and share freely.
