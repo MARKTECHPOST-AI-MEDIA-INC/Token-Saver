@@ -1,114 +1,45 @@
 # Token Saver
 
-A portable AI **skill** for deep work over heavy inputs — PDF analysis, large dataset/log analysis, and web scraping — **without losing accuracy**.
+A portable AI skill for deep work over heavy inputs — PDF analysis, large dataset/log analysis, web scraping, and **web search** — using the fewest tokens possible without losing accuracy.
 
-Ships as a native [Agent Skill](https://docs.claude.com) for Claude, plus paste-in instruction files for ChatGPT and Gemini.
+Ships as a native Agent Skill for Claude, plus paste-in instruction files for ChatGPT and Gemini.
+
+## Versions
+
+This repository keeps **two versions side by side** so you can run them against each other and see the difference:
+
+| Folder | What it is | Use it for |
+| --- | --- | --- |
+| [`v2/`](v2/) | **Current.** Adds a token-saving **web search** path (`scripts/search.py`, `references/search.md`) and the connector-bridge so it runs inside Claude/Cowork without a shell API key. Packaging fixed so `scripts/` and `references/` install with the skill. | New installs and day-to-day use. |
+| [`v1/`](v1/) | **Preserved for reference.** The original skill (PDF / data / scraping only, no web search). Untouched. | A/B comparison and regression testing — see exactly what v2 changed. |
+
+> The loose files at the repository root mirror **v1** and are kept only for backward-compatible links. For the current skill, use the [`v2/`](v2/) folder.
+
+### What changed from v1 → v2
+
+- **New: web search** — `scripts/search.py` (Tavily / Exa / Brave / SerpAPI). Fetch wide, inject narrow: passage-level retrieval (reuses `retrieve.py`'s scorer), cross-source dedup, a total-token budget, and a reversible cache so a full body is pulled (`search.py expand <url>`) only when verification fails. New reference: `references/search.md`.
+- **New: connector bridge** — inside an agent with a search connector (e.g. Tavily MCP), call the connector and pipe its JSON into the slicer with `--input -`; no shell `TAVILY_API_KEY` needed. With no key, `search.py` now prints clear guidance instead of a dead end.
+- **Updated docs** — `SKILL.md` description now covers web search, with a new routing line, a `search.py` scripts entry, and a new anti-pattern about dumping every search result. `README.md` and `requirements.txt` updated to match.
+- **Packaging fix** — the skill packages with the top-level folder named `token-saver/` (matching `name: token-saver` in `SKILL.md`), so `scripts/` and `references/` install alongside `SKILL.md` instead of `SKILL.md` landing alone.
 
 ## The idea
 
-**Keep bulk data out of the context window. Do bulk work in code. Bring only a _precise, verified slice_ into the model's reasoning.**
+**Keep bulk data out of the context window. Do bulk work in code. Bring only a precise, verified slice into the model's reasoning.**
 
 This wins on two fronts at once:
 
 - **Cost** — context is re-sent on every turn, so a 200-page PDF dumped in is re-paid on every follow-up. A small slice is paid once.
-- **Accuracy** — a model buried in irrelevant text reasons *worse* (relevant facts get lost in the middle). A tight, on-point context is more reliable.
+- **Accuracy** — a model buried in irrelevant text reasons worse (relevant facts get lost in the middle). A tight, on-point context is more reliable.
 
-So the failure mode is never "too little context" — it's **"the wrong little."** Token Saver's whole job is to retrieve precisely and verify the answer against what was retrieved.
+So the failure mode is never "too little context" — it's "the wrong little." Token Saver's whole job is to **retrieve precisely** and **verify** the answer against what was retrieved.
 
-## How accuracy is protected
+## Install / use (v2)
 
-- **Accuracy contract** — ground and cite every claim; abstain or widen instead of guessing from prior knowledge; verify before finalizing.
-- **Retrieval that doesn't miss** — always include structural anchors (outline, defined terms, footnotes), hybrid keyword + semantic matching, and neighbor expansion.
-- **Escalation ladder** — start with the cheapest slice; widen only when a verification check fails. Cheap on easy docs, thorough on hard ones, never blindly maximal.
+- **Claude (primary):** add the [`v2/`](v2/) folder as a skill (Claude.ai, Claude Code, Cowork, or the API per the Agent Skills docs). Claude reads `SKILL.md` and loads `references/*.md` on demand.
+- **ChatGPT:** paste `v2/prompts/chatgpt-instructions.md` into a Custom GPT → Instructions.
+- **Gemini:** paste `v2/prompts/gemini-gem.md` into a Gem instruction box.
 
-## What's inside
-
-```
-token-saver/
-├── SKILL.md              # Claude Agent Skill: principle, accuracy contract, workflow, ladder
-├── README.md · LICENSE · requirements.txt · .gitignore
-├── references/           # Claude loads these on demand (progressive disclosure)
-│   ├── pdf.md            # PDF / long-document tactics
-│   ├── data-analysis.md  # CSV / logs / JSON / codebase tactics
-│   ├── scraping.md       # web scraping / crawling tactics
-│   ├── accuracy.md       # grounding, precise retrieval, verification
-│   └── savings.md        # caching, stripping, budgets, offloading
-├── scripts/              # run locally; output stays tiny, bulk never enters context
-│   ├── retrieve.py       # precise citable slice: anchors + hybrid match + neighbors + coverage
-│   ├── pdf_inspect.py    # inventory, outline, scanned-page flag, text/search/tables, chunking
-│   └── web_extract.py    # main-content/clean text, selector field extraction, links
-├── eval/
-│   └── measure_tokens.py # A/B harness: exact token usage AND answer comparison
-└── prompts/
-    ├── chatgpt-instructions.md # paste into a Custom GPT
-    └── gemini-gem.md           # paste into a Gem
-```
-
-## Install / use
-
-- **Claude (primary):** add this folder as a skill (Claude.ai, Claude Code, Cowork, or the API per the Agent Skills docs). Claude reads `SKILL.md` and loads `references/*.md` on demand.
-- **ChatGPT:** paste `prompts/chatgpt-instructions.md` into a Custom GPT → Instructions (or a system message). Best with the code-interpreter / data-analysis tool enabled.
-- **Gemini:** paste `prompts/gemini-gem.md` into a Gem instruction box.
-
-> Install UIs change; check each platform's current docs for the exact menu path. The instructions themselves are platform-independent.
-
-## Quickstart (scripts)
-
-```bash
-pip install -r requirements.txt   # or install only what you use
-
-# Precise, citable slice for a question (the accuracy workhorse)
-python scripts/retrieve.py report.pdf --query "revenue recognition for SaaS" \
-  --top-k 5 --neighbors 1 --anchors --follow-xrefs -o slice.txt
-
-# PDF inventory (flags scanned pages), search, tables, chunking
-python scripts/pdf_inspect.py info report.pdf
-python scripts/pdf_inspect.py search report.pdf "clause 7.2" --neighbors 1
-python scripts/pdf_inspect.py tables report.pdf --pages 12-14 -o tables/
-python scripts/pdf_inspect.py map report.pdf --chunk 4 -o chunks/
-
-# Web: main content, structured fields, links
-python scripts/web_extract.py text https://example.com/article --main -o article.md
-python scripts/web_extract.py fields https://example.com/p --select "title=h1" --select "price=.price"
-python scripts/web_extract.py links https://example.com/blog --same-domain
-```
-
-`retrieve.py` uses semantic matching automatically if `sentence-transformers` is installed; otherwise it falls back to keyword + structural anchors.
-
-## Prove it works (tokens AND accuracy)
-
-`eval/measure_tokens.py` runs the same task two ways — naive full-document-in-context vs. the skill's anchored retrieval — over the same questions, and reports token usage *and* the answers side by side.
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-printf "What is the revenue recognition policy?\nWhat were GDPR obligations?\n" > q.txt
-
-python eval/measure_tokens.py --pdf report.pdf --questions q.txt              # tokens (in+out) + answers
-python eval/measure_tokens.py --pdf report.pdf --questions q.txt --count-only # input context size, no model run
-python eval/measure_tokens.py --pdf report.pdf --questions q.txt --dry-run    # no API; rough char/4 preview
-```
-
-The savings compound across turns: the naive approach re-pays for the whole document on every follow-up. See `references/savings.md`.
-
-## Why it works
-
-| Approach | What touches context | On a 200-page PDF, 5 questions |
-| --- | --- | --- |
-| Naive: load the whole document | ~150k tokens of raw text | re-paid every turn (~750k total) |
-| Token Saver: inventory → retrieve → verify | anchors + a few pages + citations | a small fraction, accuracy verified |
-
-The same pattern applies to a million-row CSV (a checkable aggregate, not the rows) and a 100-page codebase (the relevant files, not the tree).
-
-## Tested & verified
-
-An A/B test on Claude Code (real scripts, deterministic PDF fixtures) confirms the slice is both smaller and on-target — and that savings grow with document size. All seven automated checks pass (`7 passed, 0 failed`).
-
-| Document | Naive (full doc in context) | Token Saver (anchored slice) | Input tokens saved |
-| --- | --- | --- | --- |
-| 29-page PDF, 2 questions | 6,282 | 2,238 | **64%** |
-| 150-page PDF, 1 question | 17,212 | 536 | **96%** |
-
-Reproducible from a clean checkout in a few minutes (no API key needed for the token measurement). Full methodology, per-check breakdown, and a known limitation are in [TESTING.md](TESTING.md).
+See [`v2/README.md`](v2/README.md) for the full quickstart, the script reference, and the token/accuracy benchmarks. Testing methodology is in [`v2/TESTING.md`](v2/TESTING.md).
 
 ## License
 
