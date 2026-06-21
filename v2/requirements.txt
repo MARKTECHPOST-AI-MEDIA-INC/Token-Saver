@@ -1,0 +1,24 @@
+# Token Saver — Python dependencies
+# Install everything, or pick only what your task needs.
+
+# --- PDF inspection / retrieval (scripts/pdf_inspect.py, retrieve.py) ---
+pypdf>=4.0            # page count, outline, text extraction, search
+pdfplumber>=0.11      # table extraction (tables -> CSV)
+
+# --- Web extraction (scripts/web_extract.py) ---
+requests>=2.31        # fetch pages
+beautifulsoup4>=4.12  # parse HTML / CSS selectors
+lxml>=5.0             # fast parser backend for BeautifulSoup
+trafilatura>=1.8      # optional: clean main-content extraction (--main)
+
+# --- Web search (scripts/search.py) ---
+# Reuses requests + trafilatura (above) and retrieve.py's scorer; no new deps.
+# Providers: Tavily / Exa / Brave / SerpAPI via API key, OR pipe a connector's
+# JSON in with --input - (e.g. Tavily MCP inside Claude/Cowork) — no shell key needed.
+
+# --- Optional: semantic matching in retrieve.py ---
+# Falls back to keyword + structural anchors if not installed.
+sentence-transformers>=2.6
+
+# --- Optional: token measurement harness (eval/measure_tokens.py) ---
+anthropic>=0.34       # only needed to run the live A/B harness
